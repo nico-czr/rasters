@@ -4,7 +4,7 @@ Each cell of the probability rasters has values that range from 0 to 1 that corr
 
 **Equation 1**
 
-$$x = \frac{\sum^{n}_{i=1}{x_{i}}}{n} \tag 1$$
+$$x = \frac{\sum^{n}_{i=1}{x_{i}}}{n}$$
 
 Tephra fallout. The probability rasters of each tephra fallout scenario are obtained by exporting the intra-scenario probability ESRI ASCII (.asc) rasters from MATLAB, by using the TephraProb toolbox. We used the probability rasters with a tephra accumulation threshold of 10 kg m–2. Then, these rasters are imported to QGIS and interpolated with the GRASS function (r.resamp.interp) from a resolution of 6.0, 4.0, and 2.5 km to 2.0 km. For instance, the small-size tephra fallout scenario has an eruptive magnitude between 3.0–4.0, and five intra-scenarios. To obtain the probability raster of this scenario, we add the probability rasters of its five intra-scenarios and divide them by the total number of small size intra-scenarios (n = 5) by using Equation 1 with the GDAL raster calculator. The probability rasters of the medium and large size scenarios are obtained following the same procedure.
 
