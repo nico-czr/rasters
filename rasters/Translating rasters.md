@@ -6,11 +6,11 @@ $$x=\frac{\sum\limits_{i=1}^{n}x_{i}}{n}$$
 
 > **Equation 1**
 
-### Tephra fallout. 
+### Tephra fallout
 
 The probability rasters of each tephra fallout scenario are obtained by exporting the intra-scenario probability ESRI ASCII (`.asc`) rasters from MATLAB, by using the TephraProb toolbox. We used the probability rasters with a tephra accumulation threshold of 10 $kg m^{–2}$. Then, these rasters are imported to QGIS and interpolated with the GRASS function (`r.resamp.interp`) from a resolution of 6.0 $km$, 4.0 $km$, and 2.5 $km$ to 2.0 $km$. For instance, the small-size tephra fallout scenario has an eruptive magnitude between 3.0–4.0, and five intra-scenarios. To obtain the probability raster of this scenario, we add the probability rasters of its five intra-scenarios and divide them by the total number of small size intra-scenarios (n = 5) by using Equation 1 with the GDAL raster calculator. The probability rasters of the medium and large size scenarios are obtained following the same procedure.
 
-### Concentrated PDCs. 
+### Concentrated PDCs
 
 The probability raster of concentrated PDCs is obtained by exporting ESRI ASCII (`.asc`) rasters from MATLAB by using the ArcGridWrite function. Then, these rasters are loaded in ArcGIS ArcMap and corrected by flipping them upside down along the horizontal axis by using the ArcMap function (`flip raster`), because the ArcGridWrite function wrongfully flips the horizontal axis of the ASCII raster matrices. These raster matrices are then loaded in QGIS and all thickness values above zero are converted to a value of one with the GDAL raster calculator (Code 1). The mean probabilities are obtained by using **Equation 1** with the GDAL raster calculator (n = 30). Then, the values are normalized with the SAGA function (`raster normalization`), so that all cells had values ranging from zero to one. Finally, we smoothed the values of the rasters with the GRASS function (`r.neighbors`).
 
@@ -20,7 +20,7 @@ The probability raster of concentrated PDCs is obtained by exporting ESRI ASCII 
 
 > **Code 1**
 
-### Lahars. 
+### Lahars
 
 The probability raster of lahars is obtained by downloading the 'maximum height' vector data files (`.kml`) from LaharFlow and importing them to QGIS. These files have an error in the thickness column as it is populated with text values (e.g., ‘h = 0.234’) instead of numbers. To correct this, a new column labeled ‘thickness’ with only the thickness value must be created. To eliminate the "h = " portion we created a new column that included **code 2**.
 
@@ -32,7 +32,7 @@ replace(Name, ‘h_max =’, ‘ ‘)
 
 Then, these vector files are converted to raster format by using the GDAL function (rasterizer), with the 'thickness' column as the selected field value that will populate the cells of the raster. After, all thickness values above zero are converted to one with the GDAL raster calculator. The mean probabilities are obtained by using **Equation 1** with the GDAL raster calculator (n = 56). The same normalization and smoothing procedures described above are applied to the LaharFlow rasters.
 
-### Blocky lava flows. 
+### Lava flows
 
 The probability raster of blocky lava flows is obtained by filling with zeros the no-data cell values of the 32 resulting raster matrices using the GRASS function (`r.null`). Then, all values above zero are converted to a value of one with the GDAL raster calculator. The mean probabilities are obtained by using  Equation 1 with the GDAL raster calculator (n = 32). Then, the values are normalized with the SAGA function (`raster normalization`), so that all cells have values ranging from zero to one. Finally, the values of the rasters are smoothed with the GRASS function (`r.neighbors`).
 
