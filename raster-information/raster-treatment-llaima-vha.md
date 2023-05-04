@@ -81,7 +81,7 @@ Luego, se extrae la media del tensor (i.e., un array de 100000 valores de probab
 N1_a01_mean = tf.reduce_mean(N1)
 ```
 
-Tambien se extraen los intervalos de credibilidad de la media por medio de los percentiles 10° y 90°
+Tambien se extraen los intervalos de credibilidad por medio de los percentiles 10° y 90°
 ```
 N1_a01_quantiles = tfp.stats.quantiles(N1_a01, 98)
 
@@ -121,7 +121,7 @@ NR_mean = tf.constant(0.91, shape=None, dtype=tf.float32)
 NS_a05_mean = tf.constant(0.89, shape=None, dtype=tf.float32)
 ```
 
-Estos valores son multiplicados entre si para obtener la probabilidad media de cada evento terminal del árbol de eventos (es decir, el cuadro de codigo que viene abajo se repite para cada evento terminal:
+Estos valores son multiplicados entre si para obtener la probabilidad (media, 10° y 90°) de cada evento terminal del árbol de eventos (es decir, el cuadro de codigo que viene abajo se repite para cada evento terminal:
 1. 4 y 28 veces en el caso del arbol de eventos referencial y propuesto (caída de tefra).
 2. 26 y 236 veces en el caso del arbol de eventos referencial y propuesto (flujos de lava).
 3. 26 y 208 veces en el caso del arbol de eventos referencial y propuesto (flujos de agua-sedimento)
