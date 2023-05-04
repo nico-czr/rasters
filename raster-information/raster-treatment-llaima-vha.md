@@ -8,7 +8,7 @@ Este es el procedimiento usado para convertir los rásteres determinísticos, en
 
 Q-lavHA es un plugin que puede ser usado en QGIS, desde la versión de QGIS 3 en adelante.
 
-Primero, se hacen las 236 simulaciones de Q-LavHA en QGIS, y se obtiene un ráster en formato `.asc` por cada una de estas simulaciones.
+Primero, se hacen las 236 simulaciones de Q-LavHA en QGIS, y se obtienen 236 rásters en formato `.asc`.
 
 Se aplica la función `r.null` a cada raster con la caja de herramientas GRASS, ya esto permite: (1) convertir todas las celdas del raster con valor `no data` en celdas con valor `0`, (2) convierte el ráster desde el formato `.asc` al formato `.tif`, y (3) aplica la compresión `lzw` al raster en formato `.tif`, lo que logra reducir mucho el peso del archivo en formato `.asc`, desde unos 200 MB a 2 MB. Lo cual es ideal para no trabajar con archivos con tanto peso en Google Drive y en Google Colab.
 
@@ -18,23 +18,55 @@ Se crea un modelo gráfico en QGIS donde sólo se utiliza la función `calculado
 ```
 Este codigo hace que, dentro del raster, todas las celdas con valores de probabilidad superiores a `0.001` se conviertan en `1`, y todas las celdas con valores de probabilidad inferiores a `0.001` se convierten en celdas con valor `0`. 
 
-El modelo gráfico se ejecuta como "proceso por lotes" (batch process) y se ingresan las 236 rasters. 
-Finalmente se obtienen 236 rásteres, donde las celdas por donde no pasan flujos de lava tienen un valor de `0`, y las celdas donde pasan flujos de lava tienen un valor de `1`.
+El modelo gráfico se ejecuta como "proceso por lotes" (batch process) se va tratando los 236 rasters en grupos de 26 rasters. 
+Finalmente se obtienen 236 rásteres, donde las celdas por donde no pasan flujos de lava tienen un valor de `0`, y las celdas por donde pasan flujos de lava tienen un valor de `1`.
 
 Los 236 rásteres son cargados a Google Drive, e importados desde un documento de Jupyter Notebook en Google Colab, usando la librería `rasterio`. La cual se puede usar en Google Colab con el siguiente código:
-``
 ```
 pip install rasterio
 ```
-
 Dentro del documento de jupyter notebook se utiliza también la librería `tensorflow` de python para poder ejecutar las distribuciones Beta y Dirichlet de cada nodo.
+
+```
+import tensorflow as tf
+import tensorflowprobability as tfp
+
+N1_a01_prior = 1 # alpha hyperparameter
+N1_a02_prior = 1 # beta hyperparameter
+
+n = 161                        # n
+N1_a01_y = 50                  # alpha hyperparameter likelihood value
+N1_a02_y = n - N1_a01_y        # beta hyperparameter likelihood value (= 111)
+
+N1_a01_post = N1_a01_prior + N1_a01_y  # alpha hyperparameter a posteriori Beta
+N1_a02_post = N1_a02_prior + N1_a02_y  # beta hyperparameter a posteriori Beta
+
+N1_post = tfp.distributions.Beta(N1_a01_post, N1_a02_post)
+N1_a01 = N1_post_distribution.sample(100000)
+N1_a02 = 1 - N1_a01_post
+```
+
+Luego, se extrae la media del tensor (array de 100000 valores de probabilidad posibles), y se obitene un valor numérico.
+
+```
+N1_a01_mean = tf.reduce_mean(N1)
+```
+Tambien se extraen los intervalos de credibilidad de la media por medio de los percentiles 10° y 90°
+```
+N1_a01_quantiles = tfp.stats.quantiles(N1_a01, 98)
+
+N1_a01_perc10 = tf.slice(N1_a01_quantile, begin=[9], size=[1])
+
+N1_a01_perc90 = tf.slice(N1_a01_quantile, begin=[89], size=[1])
+```
+
 
 Los resultados de cada nodo se convierten en valores constantes:
 ```
 #reference BET
 
 #mean of node 1-2-3$\alpha$ (eruption in 2023)
-N1_mean = tf.constant(0.31, shape=None, type=tf.float32)
+N1_a01_mean = tf.constant(0.31, shape=None, type=tf.float32)
 
 #mean of node 4$\alpha_{13}$ (eruption in the main crater)
 N4_a13_mean = tf.constant(0.60, shape=None, type=tf.float32)
@@ -63,25 +95,31 @@ NS_a05_mean = tf.constant(0.89, shape=None, type=tf.float32)
 Estos valores son multiplicados entre si para obtener la probabilidad media de un evento terminal del árbol de eventos. 
 
 ```
-#reference BET
-terminal_event_000_mean = N1_mean * N4_a13_mean * N5_a02_mean * N63_mean
+#reference BET (Mean)
+N1_a01_N4_a13_N5_a02_N63_a01_mean = N1_a01_mean * N4_a13_mean * N5_a02_mean * N63_a01_mean
 
-#proposed BET
-terminal event_000_mean = N1_mean * N4_a13_mean * NR_mean * NS_a05_mean
+#proposed BET (Mean)
+N1_a01_N4_a13_NR_a01_NS_a05_mean = N1_a01_mean * N4_a13_mean * NRa01_mean * NS_a05_mean
+
+#reference BET (10th Percentile)
+N1_a01_N4_a13_N5_a02_N63_a01_perc10 = N1_a01_perc10 * N4_a13_perc10 * N5_a02_perc10 * N63_a01_perc10
+
+#proposed BET (90th Percentile)
+N1_a01_N4_a13_NR_a01_NS_a05_perc10 = N1_a01_perc10 * N4_a13_perc10 * NRa01_perc10 * NS_a05_perc10
+
+#reference BET (10th Percentile)
+N1_a01_N4_a13_N5_a02_N63_a01_perc90 = N1_a01_perc90 * N4_a13_perc90 * N5_a02_perc90 * N63_a01_perc90
+
+#proposed BET (90th Percentile)
+N1_a01_N4_a13_NR_a01_NS_a05_perc90 = N1_a01_perc90 * N4_a13_perc90 * NRa01_perc90 * NS_a05_perc90
 ```
 Esto se hace para todos los eventos terminales que desencadenan un evento de flujo de lava.
 
 Los rasteres son multiplicados por las constantes finales entregadas por el árbol de eventos propuesto (es decir, los valores de probabilidad media, el 10° percentil y el 90° percentil).
 
-```
-terminal_event_000_mean = ...
-terminal_event_000_perc10 = ...
-terminal_event_000_perc90 = ...
-```
-
 Los rásteres ponderados se suman y se dividen por la sumatoria de los valores de todos los eventos ponderados para formar tres rásteres integrados, un ráster final con la probabilidad media, un ráster final con la probabilidad del 10° percentil, y un ráster final con la probabilidad del 90° percentil.
 
-Los nuevos rásteres ponderados son exportados en formato `.tif` con rasterio y con una compresión `lzw`, por lo que no superan unos 7 MB de tamaño.
+Usando `rasterio` Los nuevos rásteres ponderados son exportados a Google Drive, en formato `.tif`  y con una compresión `lzw`, por lo que no superan unos 7 MB de tamaño.
 
 Luego, son descargados desde Google Drive, e importados nuevamente a QGIS para generar las Figuras.
 
