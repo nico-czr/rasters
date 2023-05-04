@@ -1,28 +1,91 @@
 # Tratamiento de los rásteres
 
+
+
 ## Flujos de lava: Q-LavHA
 
-Este es el procedimiento usado para convertir los rásteres determinísticos, entregados por Laharz-py, en mapas de peligro.
+Este es el procedimiento usado para convertir los rásteres determinísticos, entregados por Q-LavHA decreasing probability, en mapas de peligro.
 
-Se hacen las 236 simulaciones de Q-LavHA en QGIS, y se obtiene un ráster en formato `.asc` por cada una de estas simulaciones.
+Q-lavHA es un plugin que puede ser usado en QGIS, desde la versión de QGIS 3 en adelante.
 
-Se aplica la función `r.null` a cada raster con la caja de herramientas GRASS, y al mismo tiempo se convierte el ráster desde el formato `.asc` al formato `.tif`.
+Primero, se hacen las 236 simulaciones de Q-LavHA en QGIS, y se obtiene un ráster en formato `.asc` por cada una de estas simulaciones.
 
-A los rásteres se les aplica la función de la calculadora ráster para convertir a valores de `0` todas las celdas con valores de probabilidad inferiores a `0.001`, y convertir a valores de `1`, todas las celdas con valores de probabilidad superiores a `0.001`.
+Se aplica la función `r.null` a cada raster con la caja de herramientas GRASS, ya esto permite: (1) convertir todas las celdas del raster con valor `no data` en celdas con valor `0`, (2) convierte el ráster desde el formato `.asc` al formato `.tif`, y (3) aplica la compresión `lzw` al raster en formato `.tif`, lo que logra reducir mucho el peso del archivo en formato `.asc`, desde unos 200 MB a 2 MB. Lo cual es ideal para no trabajar con archivos con tanto peso en Google Drive y en Google Colab.
 
-En cada uno de los 236 rásteres, las celdas por donde no pasan flujos de lava tienen un valor de `0`, y las celdas donde pasan flujos de lava tienen un valor de `1`.
+Se crea un modelo gráfico en QGIS donde sólo se utiliza la función `calculadora raster` con el siguiente código:
+```
+'input-raster' > 0.001 = 1
+```
+Este codigo hace que, dentro del raster, todas las celdas con valores de probabilidad superiores a `0.001` se conviertan en `1`, y todas las celdas con valores de probabilidad inferiores a `0.001` se convierten en celdas con valor `0`. 
 
-Finalmente, se aplica la función `r.null` de la caja de herramientas GRASS, para comprimir los rásteres.
+El modelo gráfico se ejecuta como "proceso por lotes" (batch process) y se ingresan las 236 rasters. 
+Finalmente se obtienen 236 rásteres, donde las celdas por donde no pasan flujos de lava tienen un valor de `0`, y las celdas donde pasan flujos de lava tienen un valor de `1`.
 
-Los 236 rásteres son cargados a Google Drive, e importados desde un documento de Jupyter Notebook en Google Colab, con la librería Rasterio.
+Los 236 rásteres son cargados a Google Drive, e importados desde un documento de Jupyter Notebook en Google Colab, usando la librería `rasterio`. La cual se puede usar en Google Colab con el siguiente código:
+``
+```
+pip install rasterio
+```
+
+Dentro del documento de jupyter notebook se utiliza también la librería `tensorflow` de python para poder ejecutar las distribuciones Beta y Dirichlet de cada nodo.
+
+Los resultados de cada nodo se convierten en valores constantes:
+```
+#reference BET
+
+#mean of node 1-2-3$\alpha$ (eruption in 2023)
+N1_mean = tf.constant(0.31, shape=None, type=tf.float32)
+
+#mean of node 4$\alpha_{13}$ (eruption in the main crater)
+N4_a13_mean = tf.constant(0.60, shape=None, type=tf.float32)
+
+#mean of node 5$\alpha_{5}$ (VEI 3 eruption)
+N5_a02_mean = tf.constant(0.80, shape=None, type=tf.float32)
+
+#mean of node 6\alpha.3 (lava flow occurrence given a VEI 3 eruption)
+N63_mean = tf.constant(0.89, shape=None, type=tf.float32)
+
+#proposed BET
+
+#mean of node 1-2-3$\alpha$ (eruption in 2023)
+N1_mean = tf.constant(0.31, shape=None, type=tf.float32)
+
+#mean of node 4$\alpha_{13}$ (eruption in the main crater)
+N4_a13_mean = tf.constant(0.60, shape=None, type=tf.float32)
+
+#mean of node R$\alpha_{5}$ (lava flow occurrence given any eruption)
+NR_mean = tf.constant(0.91, shape=None, type=tf.float32)
+
+#mean of node S$\alpha_{5}$ (lava flow of length magnitude 5)
+NS_a05_mean = tf.constant(0.89, shape=None, type=tf.float32)
+```
+
+Estos valores son multiplicados entre si para obtener la probabilidad media de un evento terminal del árbol de eventos. 
+
+```
+#reference BET
+terminal_event_000_mean = N1_mean * N4_a13_mean * N5_a02_mean * N63_mean
+
+#proposed BET
+terminal event_000_mean = N1_mean * N4_a13_mean * NR_mean * NS_a05_mean
+```
+Esto se hace para todos los eventos terminales que desencadenan un evento de flujo de lava.
 
 Los rasteres son multiplicados por las constantes finales entregadas por el árbol de eventos propuesto (es decir, los valores de probabilidad media, el 10° percentil y el 90° percentil).
 
-Los rásteres ponderados se suman y se dividen por la sumatoria de los valores de todos los eventos ponderados para formar tres rásteres integrados, un ráster final con la probabilidad media, y otros dos rásteres con la probabilidad de los percentiles 10° y 90°.
+```
+terminal_event_000_mean = ...
+terminal_event_000_perc10 = ...
+terminal_event_000_perc90 = ...
+```
 
-Los nuevos rásteres ponderados son exportados en formato `.tif` con rasterio y con compresión `lzw`, descargados desde Google Drive, e importados nuevamente a QGIS.
+Los rásteres ponderados se suman y se dividen por la sumatoria de los valores de todos los eventos ponderados para formar tres rásteres integrados, un ráster final con la probabilidad media, un ráster final con la probabilidad del 10° percentil, y un ráster final con la probabilidad del 90° percentil.
 
-En el caso de la metodología referencial del árbol de eventos, se hace un paso previo donde se promedian todos los rásteres que representan eventos que ocurren desde cada uno de los 26 sectores del sistema volcánicos.
+Los nuevos rásteres ponderados son exportados en formato `.tif` con rasterio y con una compresión `lzw`, por lo que no superan unos 7 MB de tamaño.
+
+Luego, son descargados desde Google Drive, e importados nuevamente a QGIS para generar las Figuras.
+
+Cabe destacar, que en el caso de la metodología referencial del árbol de eventos, se hace un paso previo donde se promedian todos los rásteres que representan eventos que ocurren desde cada uno de los 26 sectores del sistema volcánico.
 
 
 ## Flujos de agua-sedimento: Laharz-py
