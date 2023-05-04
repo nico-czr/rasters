@@ -10,22 +10,51 @@ Q-lavHA es un plugin que puede ser usado en QGIS, desde la versión de QGIS 3 en
 
 Primero, se hacen las 236 simulaciones de Q-LavHA en QGIS, y se obtienen 236 rásters en formato `.asc`.
 
-Se aplica la función `r.null` a cada raster con la caja de herramientas GRASS, ya esto permite: (1) convertir todas las celdas del raster con valor `no data` en celdas con valor `0`, (2) convierte el ráster desde el formato `.asc` al formato `.tif`, y (3) aplica la compresión `lzw` al raster en formato `.tif`, lo que logra reducir mucho el peso del archivo en formato `.asc`, desde unos 200 MB a 2 MB. Lo cual es ideal para no trabajar con archivos con tanto peso en Google Drive y en Google Colab.
+Se aplica la función `r.null` a cada raster con la caja de herramientas GRASS, esto permite: 
+1. convertir todas las celdas del raster con valor `no data` en celdas con valor `0`, 
+2. convierte el ráster desde el formato `.asc` al formato `.tif`, y 
+3. aplica la compresión `lzw` al raster en formato `.tif`, lo que logra reducir mucho el peso del archivo en formato `.asc`, desde unos 200 MB a 2 MB. Lo cual es ideal para no trabajar con archivos con tanto peso en Google Drive y en Google Colab.
 
 Se crea un modelo gráfico en QGIS donde sólo se utiliza la función `calculadora raster` con el siguiente código:
 ```
 'input-raster' > 0.001 = 1
 ```
+
 Este codigo hace que, dentro del raster, todas las celdas con valores de probabilidad superiores a `0.001` se conviertan en `1`, y todas las celdas con valores de probabilidad inferiores a `0.001` se convierten en celdas con valor `0`. 
 
-El modelo gráfico se ejecuta como "proceso por lotes" (batch process) se va tratando los 236 rasters en grupos de 26 rasters. 
-Finalmente se obtienen 236 rásteres, donde las celdas por donde no pasan flujos de lava tienen un valor de `0`, y las celdas por donde pasan flujos de lava tienen un valor de `1`.
+El modelo gráfico se ejecuta como "proceso por lotes" (batch process) , y los 236 rasters se tratan en grupos de 26 rasters. 
+Finalmente se obtienen 236 nuevos rásteres, donde las celdas por donde no pasan flujos de lava tienen un valor de `0`, y las celdas por donde pasan flujos de lava tienen un valor de `1`.
 
-Los 236 rásteres son cargados a Google Drive, e importados desde un documento de Jupyter Notebook en Google Colab, usando la librería `rasterio`. La cual se puede usar en Google Colab con el siguiente código:
+Los 236 rásteres son subidos a Google Drive, e importados desde un documento de Google Colab (un documento con formato`.ipynb` de `jupyter-notebok`). 
+
+Los rasteres son importado a Google Colab usando la librería `rasterio`. La cual se puede instalar en la sesión de Google Colab con el siguiente código:
 ```
 pip install rasterio
 ```
-Dentro del documento de jupyter notebook se utiliza también la librería `tensorflow` de python para poder ejecutar las distribuciones Beta y Dirichlet de cada nodo.
+
+Primero, se puede conectar la sesión de Google Colab a Google Drive con el siguiente códifo
+```
+from google.colab import drive
+
+drive.mount('/content/drive/')
+```
+
+
+Luego, se puede importar un raster almacenado en Google Drive con el siguiente código:
+```
+import rasterio as rio
+
+# The path inside Google Drive
+raster_path = r'/content/drive/MyDrive/folder-with-rasters/raster.tif'
+
+imported_raster = rio.open(raster_path)
+
+# 'masked' means only the values != than zero are read by rasterio
+imported_raster_read = imported_raster.read(1, masked=True) 
+
+```
+
+Para estimar las probabilidades de cada nodo del árbol de eventos bayesiano se utiliza también la librería `tensorflow` de python para poder ejecutar las distribuciones Beta y Dirichlet de cada nodo.
 
 ```
 import tensorflow as tf
@@ -46,11 +75,12 @@ N1_a01 = N1_post_distribution.sample(100000)
 N1_a02 = 1 - N1_a01_post
 ```
 
-Luego, se extrae la media del tensor (array de 100000 valores de probabilidad posibles), y se obitene un valor numérico.
+Luego, se extrae la media del tensor (i.e., un array de 100000 valores de probabilidad posibles), y se obitene un valor numérico.
 
 ```
 N1_a01_mean = tf.reduce_mean(N1)
 ```
+
 Tambien se extraen los intervalos de credibilidad de la media por medio de los percentiles 10° y 90°
 ```
 N1_a01_quantiles = tfp.stats.quantiles(N1_a01, 98)
@@ -60,39 +90,41 @@ N1_a01_perc10 = tf.slice(N1_a01_quantile, begin=[9], size=[1])
 N1_a01_perc90 = tf.slice(N1_a01_quantile, begin=[89], size=[1])
 ```
 
-
-Los resultados de cada nodo se convierten en valores constantes:
+Los resultados de cada nodo se convierten en valores constantes con `tensorflow` con el mismo formato de los rasteres (`float32`):
 ```
 #reference BET
 
 #mean of node 1-2-3$\alpha$ (eruption in 2023)
-N1_a01_mean = tf.constant(0.31, shape=None, type=tf.float32)
+N1_a01_mean = tf.constant(0.31, shape=None, dtype=tf.float32)
 
 #mean of node 4$\alpha_{13}$ (eruption in the main crater)
-N4_a13_mean = tf.constant(0.60, shape=None, type=tf.float32)
+N4_a13_mean = tf.constant(0.60, shape=None, dtype=tf.float32)
 
 #mean of node 5$\alpha_{5}$ (VEI 3 eruption)
-N5_a02_mean = tf.constant(0.80, shape=None, type=tf.float32)
+N5_a02_mean = tf.constant(0.80, shape=None, dtype=tf.float32)
 
 #mean of node 6\alpha.3 (lava flow occurrence given a VEI 3 eruption)
-N63_mean = tf.constant(0.89, shape=None, type=tf.float32)
+N63_mean = tf.constant(0.89, shape=None, dtype=tf.float32)
 
 #proposed BET
 
 #mean of node 1-2-3$\alpha$ (eruption in 2023)
-N1_mean = tf.constant(0.31, shape=None, type=tf.float32)
+N1_mean = tf.constant(0.31, shape=None, dtype=tf.float32)
 
 #mean of node 4$\alpha_{13}$ (eruption in the main crater)
-N4_a13_mean = tf.constant(0.60, shape=None, type=tf.float32)
+N4_a13_mean = tf.constant(0.60, shape=None, dtype=tf.float32)
 
 #mean of node R$\alpha_{5}$ (lava flow occurrence given any eruption)
-NR_mean = tf.constant(0.91, shape=None, type=tf.float32)
+NR_mean = tf.constant(0.91, shape=None, dtype=tf.float32)
 
 #mean of node S$\alpha_{5}$ (lava flow of length magnitude 5)
-NS_a05_mean = tf.constant(0.89, shape=None, type=tf.float32)
+NS_a05_mean = tf.constant(0.89, shape=None, dtype=tf.float32)
 ```
 
-Estos valores son multiplicados entre si para obtener la probabilidad media de un evento terminal del árbol de eventos. 
+Estos valores son multiplicados entre si para obtener la probabilidad media de cada evento terminal del árbol de eventos (es decir, el cuadro de codigo que viene abajo se repite para cada evento terminal:
+1. 4 y 28 veces en el caso del arbol de eventos referencial y propuesto (caída de tefra).
+2. 26 y 236 veces en el caso del arbol de eventos referencial y propuesto (flujos de lava).
+3. 26 y 208 veces en el caso del arbol de eventos referencial y propuesto (flujos de agua-sedimento)
 
 ```
 #reference BET (Mean)
@@ -113,6 +145,7 @@ N1_a01_N4_a13_N5_a02_N63_a01_perc90 = N1_a01_perc90 * N4_a13_perc90 * N5_a02_per
 #proposed BET (90th Percentile)
 N1_a01_N4_a13_NR_a01_NS_a05_perc90 = N1_a01_perc90 * N4_a13_perc90 * NRa01_perc90 * NS_a05_perc90
 ```
+
 Esto se hace para todos los eventos terminales que desencadenan un evento de flujo de lava.
 
 Los rasteres son multiplicados por las constantes finales entregadas por el árbol de eventos propuesto (es decir, los valores de probabilidad media, el 10° percentil y el 90° percentil).
@@ -157,10 +190,7 @@ Los nuevos rásteres ponderados son exportados en formato `.tif` con rasterio y 
 En el caso de la metodología referencial del árbol de eventos, se hace un paso previo donde se promedian todos los rásteres que representan eventos que ocurren desde cada uno de los 26 sectores del sistema volcánicos.
 
 
-  
-
 ## Caída de tefra: Tephra2-TephraProb
-
 
 Este es el procedimiento usado para convertir los rásteres probabilísticos, entregados por Tephra2-TephraProb, en mapas de peligro.
 
@@ -168,7 +198,7 @@ Desde Tephra2-TephraProb se exportaron 28 rasters de cada simulación probabilí
 
 Se importan los 28 rásteres con los resultados en formato texto (`grilla ASCII de ESRI`) a QGIS.
 
-Se interpolan los ráster desde 3, 6, y 7 km a 1 km con la función `r.resamp.interp` de la caja de herramientas GRASS.
+Se interpolan los ráster desde resoluciones de 3, 6, y 7 km a una resolución general de 1 km con la función `r.resamp.interp` de la caja de herramientas GRASS.
 
 A los rásteres se les aplica  la función `r.null` para reemplazar las celdas de los límites del ráster con valores de `0`, ya que la interpolación deja a estas celdas como `sin datos`.
 
